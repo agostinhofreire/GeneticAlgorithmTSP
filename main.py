@@ -1,6 +1,6 @@
 from itertools import permutations
 import matplotlib.pyplot as plt
-
+import random
 from CitiesGraph import CitiesGraph
 from GeneticAlgorithm import GeneticAlgorithm
 

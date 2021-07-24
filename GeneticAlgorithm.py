@@ -51,6 +51,7 @@ class GeneticAlgorithm:
 
         self.no_improvement_generations = 0
         self.generation_counter = 1
+        self.individual_id = self.population_size - 1
 
     def init_population(self):
         print("Creating first population")
@@ -58,7 +59,7 @@ class GeneticAlgorithm:
         print("Cities Graph\n")
         print(self.cities_graph, "\n")
 
-        self.population = random.sample(self.cities_permutations, self.population_size)
+        self.population = list(enumerate(random.sample(self.cities_permutations, self.population_size)))
 
     def run(self):
 
@@ -67,8 +68,10 @@ class GeneticAlgorithm:
             self.get_log()
             self.update_best_solution()
             parents = self.get_parents()
-            self.crossover(parents, self.number_parents)
-            # crossover
+            children = self.crossover(parents, self.number_parents)
+            children = self.mutation(children)
+            # self.population += children
+            # print(self.population)
             # apply mutation
 
             break
@@ -86,37 +89,76 @@ class GeneticAlgorithm:
         print(f"\tParents selected by {self.parent_selection_mode.upper()}:")
         for index, pa in enumerate(parents):
             p_id = index + 1
-            print(f"\tP{p_id} [Solution: {pa[0]}] [Travel Distance: {pa[1]}]")
+            print(f"\tP{p_id} [Solution: [IND-{pa[0]}] {pa[1]}] [Travel Distance: {pa[1]}]")
 
         return parents
 
-    #Implementaion of Multi-Parent Order Crossover
+    def mutation(self, children):
+
+        print("\n\tStarting Mutation")
+
+        new_children = []
+
+        for child_id, child in children:
+            new_child = child.copy()
+
+            if random.random() <= self.mutation_chance:
+
+                number_of_mutations = random.randint(1, int(0.5*len(self.available_cities)))
+                available_index = range(len(self.available_cities))
+
+                for i in range(number_of_mutations):
+
+                    a, b = random.sample(available_index, 2)
+
+                    new_child[a] = child[b]
+                    new_child[b] = child[a]
+
+                print(f"\tMutating [IND-{child_id}] {child}] -> Result [IND-{child_id}] {new_child}]")
+
+
+            new_children.append((child_id, new_child))
+
+
+        return new_children
 
     def crossover(self, parents, number_children):
+
+        # Implementaion inspired by
+        # A novel multi-parent order crossover in genetic algorithm for combinatorial optimization problems
+        # https://doi.org/10.1016/j.cie.2019.05.012
+
 
         if number_children > len(parents):
             print("Number of children must be less than", len(parents))
             sys.exit()
 
-        slice_size = int(0.4*len(self.available_cities))
+        slice_size = int(0.5*len(self.available_cities))
         start_index = random.choice(range(len(self.available_cities) - slice_size - 1))
         end_index = start_index + slice_size
 
         children = []
 
-        print("\t Starting Crossover")
+        print("\n\tStarting Crossover")
 
-        for child_id in range(number_children):
+        child_id = 0
+
+        while len(children) < number_children:
+
             temp_child = list("-" * len(self.available_cities))
-            temp_child[start_index:end_index] = parents[child_id][0][start_index:end_index]
+            temp_child[start_index:end_index] = parents[child_id][1][start_index:end_index]
 
             order_cycle = self.parents_order_cycle(child_id)
 
             child = self.create_child(temp_child, parents, order_cycle, end_index)
-            print("Slices", temp_child)
-            print("Created Child", child)
+
             if self.valid_solution(child):
-                children.append(child)
+                self.individual_id += 1
+                print(f"\tSlice {temp_child} -> Created Child [IND-{self.individual_id}] {child}")
+                children.append((self.individual_id, child))
+                child_id += 1
+
+        return children
 
     def create_child(self, child, parents, order_cycle, end_index):
 
@@ -124,6 +166,7 @@ class GeneticAlgorithm:
 
         last_id = order_cycle[-1]
         current_gene = end_index
+        current_child_gene = end_index
 
         for parent_id in order_cycle:
             while True:
@@ -134,13 +177,16 @@ class GeneticAlgorithm:
                 if current_gene >= len(self.available_cities):
                     current_gene = 0
 
-                current_parent = parents[parent_id][0]
+                if current_child_gene >= len(self.available_cities):
+                    current_child_gene = 0
+
+                current_parent = parents[parent_id][1]
 
                 gene = current_parent[current_gene]
 
                 if gene not in temp_child:
-
-                    temp_child[current_gene] = gene
+                    temp_child[current_child_gene] = gene
+                    current_child_gene += 1
 
                 else:
                     if parent_id != last_id:
@@ -148,48 +194,47 @@ class GeneticAlgorithm:
 
                 current_gene += 1
 
-
-
         return temp_child
-
-
-
 
 
     def evaluate(self):
 
         eval_results = []
 
-        for individual in self.population:
+        for ind_id, individual in self.population:
             ind_eval = self.individual_eval(individual)
-            eval_results.append((individual, ind_eval))
+            eval_results.append((ind_id, individual, ind_eval))
 
 
-        self.population_eval = sorted(eval_results, key=lambda x: x[1])
+        self.population_eval = sorted(eval_results, key=lambda x: x[2])
 
     def update_best_solution(self):
 
         if self.best_solution == None:
 
             self.best_solution = self.population_eval[0]
-            print("\tFound a better solution {} - Travel Distance {}".format(self.best_solution[0],
-                                                                         self.best_solution[1]))
+            print("\tFound a better solution [IND-{}] {} - Travel Distance {}".format(self.best_solution[0],
+                                                                         self.best_solution[1],
+                                                                         self.best_solution[2]))
 
         else:
             if self.population_eval[0][1] < self.best_solution[1]:
 
                 self.best_solution = self.population_eval[0]
                 self.no_improvement_generations = 0
-                print("\tFound a better solution {} - Travel Distance {}".format(self.best_solution[0],
-                                                                             self.best_solution[1]))
+                print("\tFound a better solution [IND-{}] {} - Travel Distance {}".format(self.best_solution[0],
+                                                                             self.best_solution[1],
+                                                                             self.best_solution[2]))
 
             else:
                 self.no_improvement_generations += 1
                 print("\tNo improvement was found in the solution.")
-                print("\tBest solution in the generation {} - Travel Distance {}".format(self.population_eval[0][0],
-                                                                                     self.population_eval[0][1]))
-                print("\tBest solution found {} - Travel Distance {}".format(self.best_solution[0],
-                                                                         self.best_solution[1]))
+                print("\tBest solution in the generation [IND-{}] {} - Travel Distance {}".format(self.population_eval[0][0],
+                                                                                     self.population_eval[0][1],
+                                                                                     self.population_eval[0][2]))
+                print("\tBest solution found [IND-{}] {} - Travel Distance {}".format(self.best_solution[0],
+                                                                         self.best_solution[1],
+                                                                         self.best_solution[2]))
 
         print()
         self.generation_counter += 1
@@ -233,8 +278,14 @@ class GeneticAlgorithm:
 
         print("[INFO] {}° Generation Results\n".format(self.generation_counter))
 
-        for index, (ind, ev) in enumerate(self.population_eval):
-            line = f"\t[{index}°] [Solution: {ind}] [Travel Distance: {ev}]"
+        for index, (ind_id, ind, ev) in enumerate(self.population_eval):
+
+            if index < 9:
+                spaces = " "
+            else:
+                spaces = ""
+
+            line = f"\t[{index+1}°{spaces}] [Solution: [IND-{ind_id}] {ind}] [Travel Distance: {ev}]"
             print(line)
 
         print()
