@@ -2,13 +2,16 @@ import random
 import numpy as np
 from itertools import permutations
 import sys
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
 
 from CitiesGraph import CitiesGraph
 
 
 class GeneticAlgorithm:
 
-    def __init__(self, population_size=10, mutation_chance=0.05, number_parents=2, cities_controller=CitiesGraph()):
+    def __init__(self, population_size=10, mutation_chance=0.05, max_generations=1000, max_no_improvement=25, number_parents=2, cities_controller=CitiesGraph()):
 
         # Cities config
 
@@ -36,7 +39,12 @@ class GeneticAlgorithm:
         self.population_eval = []
         self.number_parents = number_parents
         self.best_solution = None
-        self.history = []
+
+        self.to_remove = []
+        self.history = {
+            "Generation": [],
+            "Fitness": []
+        }
 
         # Fitting config
 
@@ -46,8 +54,8 @@ class GeneticAlgorithm:
 
         self.parent_selection_mode = selection_modes[0]
 
-        self.max_no_improvement = 15
-        self.max_generations = 1000
+        self.max_no_improvement = max_no_improvement
+        self.max_generations = max_generations
 
         self.no_improvement_generations = 0
         self.generation_counter = 1
@@ -64,17 +72,31 @@ class GeneticAlgorithm:
     def run(self):
 
         while self.generation_counter < self.max_generations and self.no_improvement_generations < self.max_no_improvement:
+            print("\n[INFO] {}° Generation Results\n".format(self.generation_counter))
             self.evaluate()
             self.get_log()
             self.update_best_solution()
             parents = self.get_parents()
             children = self.crossover(parents, self.number_parents)
             children = self.mutation(children)
-            # self.population += children
-            # print(self.population)
-            # apply mutation
+            self.population += children
 
-            break
+            self.history["Generation"].append(self.generation_counter)
+            self.history["Fitness"].append(self.best_solution[2])
+
+        print("\n\n Stopping fitting")
+        print("\tBest solution [IND-{}] {} - Travel Distance {}".format(self.best_solution[0],
+                                                                                  self.best_solution[1],
+                                                                                  self.best_solution[2]))
+
+        results = pd.DataFrame.from_dict(data=self.history)
+        sns.set_style("whitegrid")
+        plt.title("Genetic Algorithm - TSP")
+        sns.lineplot(data=results, y="Fitness", x="Generation")
+        plt.plot()
+        plt.show()
+
+
 
     def get_parents(self):
         parents = []
@@ -82,15 +104,18 @@ class GeneticAlgorithm:
         if self.parent_selection_mode == "tournament":
             while len(parents) < self.number_parents:
                 t = random.sample(self.population_eval, int(self.population_size*0.6))
-                p = min(t, key=lambda x: x[1])
+                p = min(t, key=lambda x: x[2])
                 if p not in parents:
                     parents.append(p)
 
         print(f"\tParents selected by {self.parent_selection_mode.upper()}:")
+        temp_to_remove = []
         for index, pa in enumerate(parents):
             p_id = index + 1
-            print(f"\tP{p_id} [Solution: [IND-{pa[0]}] {pa[1]}] [Travel Distance: {pa[1]}]")
+            print(f"\tP{p_id} [Solution: [IND-{pa[0]}] {pa[1]}] [Travel Distance: {pa[2]}]")
+            temp_to_remove.append(pa[0])
 
+        self.to_remove = temp_to_remove
         return parents
 
     def mutation(self, children):
@@ -114,7 +139,11 @@ class GeneticAlgorithm:
                     new_child[a] = child[b]
                     new_child[b] = child[a]
 
-                print(f"\tMutating [IND-{child_id}] {child}] -> Result [IND-{child_id}] {new_child}]")
+                if self.valid_solution(new_child):
+                    print(f"\tMutating [IND-{child_id}] {child}] -> Result [IND-{child_id}] {new_child}]")
+                else:
+                    print(f"\tMutating [IND-{child_id}] {child}] -> Result [IND-{child_id}] {new_child}] [INVALID]")
+                    new_child =child.copy()
 
 
             new_children.append((child_id, new_child))
@@ -157,6 +186,8 @@ class GeneticAlgorithm:
                 print(f"\tSlice {temp_child} -> Created Child [IND-{self.individual_id}] {child}")
                 children.append((self.individual_id, child))
                 child_id += 1
+            else:
+                print(child)
 
         return children
 
@@ -172,7 +203,7 @@ class GeneticAlgorithm:
             while True:
 
                 if "-" not in temp_child:
-                    break
+                    return temp_child
 
                 if current_gene >= len(self.available_cities):
                     current_gene = 0
@@ -183,6 +214,7 @@ class GeneticAlgorithm:
                 current_parent = parents[parent_id][1]
 
                 gene = current_parent[current_gene]
+
 
                 if gene not in temp_child:
                     temp_child[current_child_gene] = gene
@@ -201,12 +233,26 @@ class GeneticAlgorithm:
 
         eval_results = []
 
+        new_population = []
+
+        print("\n\tStarting individuals selection")
+
         for ind_id, individual in self.population:
             ind_eval = self.individual_eval(individual)
-            eval_results.append((ind_id, individual, ind_eval))
 
+            if ind_id in self.to_remove:
+                print(f"\t\tRemoving individual [IND-{ind_id}] {individual} - Travel Distance {ind_eval}")
+            else:
+                eval_results.append((ind_id, individual, ind_eval))
+                new_population.append((ind_id, individual))
+
+
+        self.population = new_population
 
         self.population_eval = sorted(eval_results, key=lambda x: x[2])
+
+        print()
+
 
     def update_best_solution(self):
 
@@ -218,7 +264,7 @@ class GeneticAlgorithm:
                                                                          self.best_solution[2]))
 
         else:
-            if self.population_eval[0][1] < self.best_solution[1]:
+            if self.population_eval[0][2] < self.best_solution[2]:
 
                 self.best_solution = self.population_eval[0]
                 self.no_improvement_generations = 0
@@ -228,13 +274,13 @@ class GeneticAlgorithm:
 
             else:
                 self.no_improvement_generations += 1
-                print("\tNo improvement was found in the solution.")
+                print(f"\tNo improvement was found - {self.no_improvement_generations} generations")
                 print("\tBest solution in the generation [IND-{}] {} - Travel Distance {}".format(self.population_eval[0][0],
                                                                                      self.population_eval[0][1],
                                                                                      self.population_eval[0][2]))
-                print("\tBest solution found [IND-{}] {} - Travel Distance {}".format(self.best_solution[0],
-                                                                         self.best_solution[1],
-                                                                         self.best_solution[2]))
+                print("\tCurrent best solution found [IND-{}] {} - Travel Distance {}".format(self.best_solution[0],
+                                                                             self.best_solution[1],
+                                                                             self.best_solution[2]))
 
         print()
         self.generation_counter += 1
@@ -276,7 +322,6 @@ class GeneticAlgorithm:
 
     def get_log(self):
 
-        print("[INFO] {}° Generation Results\n".format(self.generation_counter))
 
         for index, (ind_id, ind, ev) in enumerate(self.population_eval):
 

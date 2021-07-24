@@ -10,8 +10,10 @@ from GeneticAlgorithm import GeneticAlgorithm
 cities_controller = CitiesGraph(size=10)
 
 genetic_algorithm = GeneticAlgorithm(
-    population_size=10,
+    population_size=500,
     mutation_chance=0.05,
+    max_generations=10000,
+    max_no_improvement=30,
     number_parents=4,
     cities_controller=cities_controller
 )

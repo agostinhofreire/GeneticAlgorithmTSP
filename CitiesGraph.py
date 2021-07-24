@@ -3,6 +3,9 @@ import random
 import pandas as pd
 import sys
 
+random.seed(2)
+np.random.seed(3)
+
 class CitiesGraph:
 
     def __init__(self, size=10):
