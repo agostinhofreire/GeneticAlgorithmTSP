@@ -11,13 +11,19 @@ from CitiesGraph import CitiesGraph
 
 class GeneticAlgorithm:
 
-    def __init__(self, population_size=10, mutation_chance=0.05, max_generations=1000, max_no_improvement=25, number_parents=2, cities_controller=CitiesGraph()):
+    def __init__(self, population_size=10, mutation_chance=0.05, max_generations=1000, max_no_improvement=25, number_parents=2,selection_mode_id=0, cities_controller=CitiesGraph(), fit_mode="create", start="A"):
 
         # Cities config
 
         self.cities_controller = cities_controller
-        self.cities_graph = self.cities_controller.create()
-        self.start_city = self.cities_controller.getStart()
+
+        if fit_mode == "create":
+            self.cities_graph = self.cities_controller.create()
+            self.start_city = self.cities_controller.getStart()
+        else:
+            self.cities_graph = self.cities_controller.load()
+            self.start_city = start.upper()
+
         self.cities = self.cities_controller.cities
         self.available_cities = self.cities_controller.cities.copy()
 
@@ -49,10 +55,11 @@ class GeneticAlgorithm:
         # Fitting config
 
         selection_modes = {
-            0: "tournament"
+            0: "tournament",
+            1: "elitism"
         }
 
-        self.parent_selection_mode = selection_modes[0]
+        self.parent_selection_mode = selection_modes[selection_mode_id]
 
         self.max_no_improvement = max_no_improvement
         self.max_generations = max_generations
@@ -82,17 +89,25 @@ class GeneticAlgorithm:
             self.population += children
 
             self.history["Generation"].append(self.generation_counter)
-            self.history["Fitness"].append(self.best_solution[2])
+            self.history["Fitness"].append(self.population_eval[0][2])
+
+            sns.set_style("whitegrid")
+            plt.title("Genetic Algorithm - TSP")
+            sns.lineplot(data=self.history, y="Fitness", x="Generation")
+            plt.plot()
+            plt.draw()
+            plt.pause(0.0001)
+            plt.clf()
 
         print("\n\n Stopping fitting")
         print("\tBest solution [IND-{}] {} - Travel Distance {}".format(self.best_solution[0],
                                                                                   self.best_solution[1],
                                                                                   self.best_solution[2]))
 
-        results = pd.DataFrame.from_dict(data=self.history)
+
         sns.set_style("whitegrid")
         plt.title("Genetic Algorithm - TSP")
-        sns.lineplot(data=results, y="Fitness", x="Generation")
+        sns.lineplot(data=self.history, y="Fitness", x="Generation")
         plt.plot()
         plt.show()
 
@@ -103,10 +118,13 @@ class GeneticAlgorithm:
 
         if self.parent_selection_mode == "tournament":
             while len(parents) < self.number_parents:
-                t = random.sample(self.population_eval, int(self.population_size*0.6))
+                t = random.sample(self.population_eval, int(self.population_size*0.4))
                 p = min(t, key=lambda x: x[2])
                 if p not in parents:
                     parents.append(p)
+
+        elif self.parent_selection_mode == "elitism":
+            parents = self.population_eval[:self.number_parents]
 
         print(f"\tParents selected by {self.parent_selection_mode.upper()}:")
         temp_to_remove = []
@@ -129,7 +147,7 @@ class GeneticAlgorithm:
 
             if random.random() <= self.mutation_chance:
 
-                number_of_mutations = random.randint(1, int(0.5*len(self.available_cities)))
+                number_of_mutations = random.randint(1, int(0.6*len(self.available_cities)))
                 available_index = range(len(self.available_cities))
 
                 for i in range(number_of_mutations):

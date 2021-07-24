@@ -3,8 +3,6 @@ import random
 import pandas as pd
 import sys
 
-random.seed(2)
-np.random.seed(3)
 
 class CitiesGraph:
 
@@ -18,11 +16,27 @@ class CitiesGraph:
             sys.exit()
 
     def create(self):
-        graph = np.random.randint(self.size**2, size=(self.size, self.size)) + 1
-        np.fill_diagonal(graph, 0)
+        graph_up = np.random.randint(self.size**2, size=(self.size, self.size)) + 1
+        np.fill_diagonal(graph_up, 0)
+
+
+        for i in range(self.size):
+            for j in range(self.size):
+                if i < j:
+                    graph_up[i, j] = 0
+
+        graph_down = graph_up.T
+
+
+        graph = graph_up + graph_down
+
         graph_df = pd.DataFrame(data=graph, index=self.cities, columns=self.cities)
+        graph_df.to_csv("./cities.csv")
 
         return graph_df
+
+    def load(self, path="./cities.csv"):
+        return pd.read_csv(path, index_col=0)
 
     def getStart(self):
         return random.choice(self.cities)
